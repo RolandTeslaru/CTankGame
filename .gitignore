@@ -1,0 +1,5 @@
+build/
+tancuri
+*.o
+*.d
+.DS_Store

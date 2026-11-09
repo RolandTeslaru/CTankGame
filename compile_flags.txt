@@ -1,0 +1,6 @@
+-std=c11
+-Wall
+-Wextra
+-Iinclude
+-D_DEFAULT_SOURCE
+-pthread
