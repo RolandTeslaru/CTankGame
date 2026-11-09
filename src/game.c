@@ -6,9 +6,12 @@ game_t game;
 
 void game_init(void)
 {
-    memset(game.bullets, 0, sizeof(game.bullets));
+    for (int r = 0; r < BOARD_ROWS; r ++)
+        for (int c = 0; c < BOARD_COLS; c ++)
+            game.bullets[r][c] = 0;
+
     game.isRunning = 1;
-    game.winner = -1;
+    game.winner = -1; // -1 nimeni, in rest indexul tankului
     game.active_bullets = 0;
 
     pthread_mutex_init(&game.board_lock, NULL);
@@ -26,9 +29,9 @@ void game_destroy(void)
 int game_is_running(void)
 {
     pthread_mutex_lock(&game.board_lock);
-    int running = game.isRunning;
+    int isRunning = game.isRunning;
     pthread_mutex_unlock(&game.board_lock);
-    return running;
+    return isRunning;
 }
 
 void game_stop(void)

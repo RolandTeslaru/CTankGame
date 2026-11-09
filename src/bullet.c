@@ -6,9 +6,11 @@
 #include "ui.h"
 
 // Apelata cu board_lock luat, cand proiectilul dispare.
+// fara el, jocul s ar putea incheia fara ca threadurile de pullets sa fie done
+// 
 static void bullet_finish_locked(void)
 {
-    game.active_bullets--;
+    game.active_bullets --;
     if (game.active_bullets == 0)
         pthread_cond_signal(&game.bullets_done);
 }
@@ -23,15 +25,16 @@ static void bullet_hit_tank_locked(tank_t *target, int shooter)
     if (target->lives == 0 && game.isRunning) {
         game.isRunning = 0;
         game.winner = shooter;
-    }
+    }   
 }
 
 static tank_t *tank_at_locked(position_t p)
 {
     char cell = game.board[p.row][p.col];
-    for (int i = 0; i < 2; i++)
-        if (game.tanks[i].name == cell)
-            return &game.tanks[i];
+        for (int i = 0; i < 2; i++)
+            if (game.tanks[i].name == cell)
+                return &game.tanks[i];
+
     return NULL;
 }
 
@@ -39,30 +42,31 @@ static void *bullet_thread(void *arg)
 {
     bullet_t *b = arg;
 
-    for (;;) {
+    while(1) {
         pthread_mutex_lock(&game.board_lock);
 
         int done = !game.isRunning;
-
-        if (!done) {
+    
+        if(!done){
             position_t next = board_step(b->pos, b->dir);
 
-            if (!board_in_bounds(next) || game.board[next.row][next.col] == CELL_WALL) {
+            // daca se izbeste de un perete sau e in afara boundsurilor atunci s a terminat bulletul
+            if(board_in_bounds(next) == 0 || game.board[next.row][next.col] == CELL_WALL)
                 done = 1;
-            } else {
-                tank_t *target = tank_at_locked(next);
-                if (target != NULL) {
+            else{
+                // try to get the tank at the next position
+                tank_t * target = tank_at_locked(next);
+                if (target != NULL){
                     bullet_hit_tank_locked(target, b->owner);
                     done = 1;
                 } else {
-                    // Pozitie libera (sau cu alt proiectil): proiectilul avanseaza.
-                    if (b->on_board) {
+                    if (b ->on_board){
                         game.bullets[b->pos.row][b->pos.col]--;
                         ui_draw_cell(b->pos);
                     }
                     b->pos = next;
                     b->on_board = 1;
-                    game.bullets[next.row][next.col]++;
+                    game.bullets[next.row][next.col] += 1;
                     ui_draw_cell(next);
                 }
             }
@@ -86,7 +90,7 @@ static void *bullet_thread(void *arg)
         usleep(BULLET_DELAY_US);
     }
 
-    free(b);
+    free(b); // elibereazxa memoria glontului, 
     return NULL;
 }
 
@@ -97,11 +101,12 @@ void bullet_fire(const tank_t *shooter)
         return;
 
     pthread_mutex_lock(&game.board_lock);
-    if (!game.isRunning) {
+    if(!game.isRunning) {
         pthread_mutex_unlock(&game.board_lock);
         free(b);
         return;
-    }
+    }    
+
     // Proiectilul porneste din pozitia tancului si iese in directia lui.
     b->pos = shooter->pos;
     b->dir = shooter->dir;
@@ -119,5 +124,6 @@ void bullet_fire(const tank_t *shooter)
         return;
     }
     // Nimeni nu face join pe proiectile: resursele se elibereaza singure la final.
+    // nu tinem evidenta la bullets
     pthread_detach(thread);
 }

@@ -33,12 +33,14 @@ void board_init(position_t *start_a, position_t *start_b)
             char cell = MAZE[r][c];
 
             if (cell == '1') {
-                start_a->row = r;
-                start_a->col = c;
+                start_a -> row = r;
+                start_a -> col = c;
+                // inlocuire 
                 cell = CELL_EMPTY;
-            } else if (cell == '2') {
-                start_b->row = r;
-                start_b->col = c;
+            }
+            else if (cell == '2') {
+                start_b -> row = r;
+                start_b -> col = c;
                 cell = CELL_EMPTY;
             }
             game.board[r][c] = cell;
@@ -48,16 +50,24 @@ void board_init(position_t *start_a, position_t *start_b)
 
 int board_in_bounds(position_t p)
 {
-    return p.row >= 0 && p.row < BOARD_ROWS && p.col >= 0 && p.col < BOARD_COLS;
+    if (p.row >= 0 && p.row < BOARD_ROWS)
+        if(p.col >= 0 && p.col < BOARD_COLS)
+            return 1;
+    
+    return 0;
 }
 
 position_t board_step(position_t p, direction_t dir)
 {
     switch (dir) {
-    case DIR_UP:    p.row--; break;
-    case DIR_DOWN:  p.row++; break;
-    case DIR_LEFT:  p.col--; break;
-    case DIR_RIGHT: p.col++; break;
+        case DIR_UP:
+            p.row --; break;
+        case DIR_DOWN: 
+            p.row ++; break;
+        case DIR_LEFT:
+            p.col --; break;
+        case DIR_RIGHT:
+            p.col ++; break;
     }
     return p;
 }

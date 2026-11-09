@@ -6,6 +6,7 @@
 #include "game.h"
 
 // Tabla se deseneaza in interiorul unui chenar, sub randul cu vietile.
+// UI POSITIONS
 #define LIVES_ROW  0
 #define FRAME_TOP  1
 #define BOARD_TOP  (FRAME_TOP + 1)
@@ -14,36 +15,35 @@
 #define HELP_ROW   (FRAME_BOTTOM + 1)
 #define SCREEN_COLS (BOARD_COLS + 2)
 
-enum {
-    PAIR_WALL = 1,
-    PAIR_TANK_A,
-    PAIR_TANK_B,
-    PAIR_BULLET
-};
+#define PAIR_WALL   1
+#define PAIR_TANK_A 2
+#define PAIR_TANK_B 3
+#define PAIR_BULLET 4
 
 int ui_init(void)
 {
-    initscr();
+    initscr(); // start ncurses
+    // verificare dimensiune minima
     if (LINES < HELP_ROW + 1 || COLS < SCREEN_COLS) {
         endwin();
-        fprintf(stderr, "Terminalul trebuie sa aiba cel putin %d x %d caractere.\n",
-                SCREEN_COLS, HELP_ROW + 1);
+        fprintf(stderr, "terminalul este prea mic \n");
         return -1;
     }
 
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
-    curs_set(0);
-    timeout(100);   // getch() revine dupa 100 ms chiar daca nu s-a apasat nimic
+    cbreak(); // tastele ajung imd
+    noecho(); // nu se afiseze ce tastez
+    keypad(stdscr, 1); // returneaza KEY_UP, KEY_LEFT etc in loc de o secventa pt tastele speciale
+    curs_set(0); // ascunde cursorul
+    timeout(100); // getch() revine dupa 100 ms chiar daca nu s-a apasat nimic
 
-    if (has_colors()) {
-        start_color();
+    if (has_colors()) { // poate afisa culori terminalul ? 
+        start_color(); 
         init_pair(PAIR_WALL,   COLOR_WHITE,  COLOR_BLUE);
         init_pair(PAIR_TANK_A, COLOR_GREEN,  COLOR_BLACK);
         init_pair(PAIR_TANK_B, COLOR_RED,    COLOR_BLACK);
         init_pair(PAIR_BULLET, COLOR_YELLOW, COLOR_BLACK);
     }
+
     return 0;
 }
 
@@ -54,7 +54,10 @@ void ui_end(void)
 
 static int tank_color(char name)
 {
-    return name == game.tanks[0].name ? PAIR_TANK_A : PAIR_TANK_B;
+    if (name == game.tanks[0].name)
+        return PAIR_TANK_A;
+    else
+        return PAIR_TANK_B;
 }
 
 // Apelata cu ui_lock luat.
@@ -64,25 +67,26 @@ static void draw_cell_locked(position_t p)
     chtype ch;
 
     if (cell == CELL_WALL)
-        ch = '#' | COLOR_PAIR(PAIR_WALL);
+        ch = '#' | COLOR_PAIR(PAIR_WALL); // zidul si culoarea
     else if (cell != CELL_EMPTY)
-        ch = (chtype)cell | COLOR_PAIR(tank_color(cell)) | A_BOLD;
+        ch = (chtype)cell | COLOR_PAIR(tank_color(cell)) | A_BOLD; //litera tancului cu culoarea si cu bold
     else if (game.bullets[p.row][p.col] > 0)
-        ch = '.' | COLOR_PAIR(PAIR_BULLET) | A_BOLD;
+        ch = '.' | COLOR_PAIR(PAIR_BULLET) | A_BOLD; // glontul
     else
         ch = ' ';
 
-    mvaddch(BOARD_TOP + p.row, BOARD_LEFT + p.col, ch);
+    mvaddch(BOARD_TOP + p.row, BOARD_LEFT + p.col, ch); // scrie iin bufferull de terminal
 }
 
+// deseneaza randul cu vieti
 static void draw_lives_locked(void)
 {
     char right[32];
     const tank_t *a = &game.tanks[0];
     const tank_t *b = &game.tanks[1];
 
-    move(LIVES_ROW, 0);
-    clrtoeol();
+    move(LIVES_ROW, 0); // mutam cursorul la inceputul randului
+    clrtoeol(); // sterge tot randul
 
     attron(COLOR_PAIR(PAIR_TANK_A) | A_BOLD);
     mvprintw(LIVES_ROW, 0, "%c: %d", a->name, a->lives);

@@ -8,6 +8,10 @@
 #include "game.h"
 #include "ui.h"
 
+// asignez tastele tancului
+// creez semaforul cu permiiusnile under doar eu pot sal accesez si, 
+// O_CREAT creazxa daca nu exista si O_EXCL esueaza daca exista deja 
+
 int tank_init(tank_t *tank, int index, char name, const char *keys,
               position_t start, direction_t dir)
 {
@@ -27,12 +31,11 @@ int tank_init(tank_t *tank, int index, char name, const char *keys,
     tank->key_count = 0;
     pthread_mutex_init(&tank->key_lock, NULL);
 
-    // Semafor POSIX cu nume: sem_init (fara nume) nu functioneaza pe macOS,
-    // sem_open merge si pe Linux si pe macOS. Numele se sterge imediat,
-    // semaforul ramane valid pana la sem_close.
     char sem_name[32];
     snprintf(sem_name, sizeof(sem_name), "/ctank-%d-%d", (int)getpid(), index);
+
     tank->keys_available = sem_open(sem_name, O_CREAT | O_EXCL, 0600, 0);
+
     if (tank->keys_available == SEM_FAILED) {
         perror("sem_open");
         pthread_mutex_destroy(&tank->key_lock);
@@ -48,22 +51,26 @@ void tank_destroy(tank_t *tank)
     pthread_mutex_destroy(&tank->key_lock);
 }
 
+// Verificada daca o tasta apartine controalelor unui tank
 int tank_owns_key(const tank_t *tank, int key)
 {
-    const controls_t *c = &tank->controls;
-    return key == c->up || key == c->down || key == c->left ||
-           key == c->right || key == c->fire;
+    const controls_t *c = &tank -> controls;
+
+    if (key == c->up || key == c->down || key == c->left || key == c->right || key == c->fire)
+        return 1;
+    return 0;
 }
+
 
 void tank_push_key(tank_t *tank, int key)
 {
     pthread_mutex_lock(&tank->key_lock);
-    if (tank->key_count == KEY_QUEUE_SIZE) {
-        // Coada plina: tancul nu tine pasul, renuntam la tasta.
+    // Daca daca coada e plina nu putem sa mai adaugam noul key
+    if(tank->key_count == KEY_QUEUE_SIZE){
         pthread_mutex_unlock(&tank->key_lock);
         return;
     }
-    int tail = (tank->key_head + tank->key_count) % KEY_QUEUE_SIZE;
+    int tail = (tank->key_head + tank->key_count) % KEY_QUEUE_SIZE; 
     tank->key_queue[tail] = key;
     tank->key_count++;
     pthread_mutex_unlock(&tank->key_lock);
@@ -82,10 +89,12 @@ static int tank_pop_key(tank_t *tank)
     int key = -1;
 
     pthread_mutex_lock(&tank->key_lock);
+    // coada circulara de tastte (key_head + key_count) % KEY_QUEUE_SIZE
+    // tancul socate de la key head, 
     if (tank->key_count > 0) {
-        key = tank->key_queue[tank->key_head];
+        key = tank->key_queue[tank->key_head]; // luam cea mai veche tasta apasata din coada 
         tank->key_head = (tank->key_head + 1) % KEY_QUEUE_SIZE;
-        tank->key_count--;
+        tank->key_count --;
     }
     pthread_mutex_unlock(&tank->key_lock);
     return key;
@@ -96,23 +105,23 @@ static void tank_move(tank_t *tank, direction_t dir)
     pthread_mutex_lock(&game.board_lock);
 
     if (game.isRunning) {
-        // Directia se schimba chiar daca drumul e blocat, ca sa poti tinti.
         tank->dir = dir;
 
         position_t next = board_step(tank->pos, dir);
-        if (board_in_bounds(next) &&
-            game.board[next.row][next.col] == CELL_EMPTY &&
-            game.bullets[next.row][next.col] == 0) {
-            position_t old = tank->pos;
+        if (board_in_bounds(next))
+            if (game.board[next.row][next.col] == CELL_EMPTY)
+                if (game.bullets[next.row][next.col] == 0){
+                    
+                    position_t old = tank->pos;
+                    game.board[old.row][old.col] = CELL_EMPTY;
+                    game.board[next.row][next.col] = tank->name;
+                    tank->pos = next;
 
-            game.board[old.row][old.col] = CELL_EMPTY;
-            game.board[next.row][next.col] = tank->name;
-            tank->pos = next;
-
-            ui_draw_cell(old);
-            ui_draw_cell(next);
-            ui_refresh();
-        }
+                    ui_draw_cell(old);
+                    ui_draw_cell(next);
+                    ui_refresh();
+                }
+                
     }
 
     pthread_mutex_unlock(&game.board_lock);
@@ -122,8 +131,8 @@ static void *tank_thread(void *arg)
 {
     tank_t *tank = arg;
 
-    for (;;) {
-        // Doarme pana cand main pune o tasta in coada (sau il trezeste la final).
+    while(1){
+        // doarme pana cand main pune o tasta in coada sau il trezesc manual
         sem_wait(tank->keys_available);
 
         if (!game_is_running())
@@ -145,6 +154,7 @@ static void *tank_thread(void *arg)
         else if (key == c->right)
             tank_move(tank, DIR_RIGHT);
     }
+
     return NULL;
 }
 

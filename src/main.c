@@ -27,7 +27,7 @@ static int parse_args(int argc, char *argv[], char names[2], const char *keys[2]
     if (argc != 5)
         return -1;
 
-    int used[256] = { 0 };
+    int used[256] = { 0 }; // notez ce taste am folosit deja
 
     for (int i = 0; i < 2; i++) {
         const char *name = argv[1 + 2 * i];
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
     char names[2];
     const char *keys[2];
 
-    // Parsam argumentele
+    // Parsam argumentele si daca nu retuneaza 0 inseamna ca ceva a fost introdus gresit
     if (parse_args(argc, argv, names, keys) != 0) {
         usage(argv[0]);
         return 1;
@@ -76,7 +76,9 @@ int main(int argc, char *argv[])
     position_t start[2];
     board_init(&start[0], &start[1]);
 
+    // Tank start directions
     direction_t start_dir[2] = { DIR_RIGHT, DIR_LEFT };
+    // initializam tankurile
     for (int i = 0; i < 2; i++) {
         if (tank_init(&game.tanks[i], i, names[i], keys[i], start[i], start_dir[i]) != 0) {
             if (i == 1)
@@ -94,18 +96,22 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    // initial render
     pthread_mutex_lock(&game.board_lock);
     ui_draw_all();
     pthread_mutex_unlock(&game.board_lock);
 
+    // apelem tnak start la ambele tankuri
     int started = 0;
     for (; started < 2; started++)
         if (tank_start(&game.tanks[started]) != 0)
             break;
+
     if (started < 2)
         game_stop();
 
-    // Bucla de input: doar main citeste tastatura si da fiecarui tanc tastele lui.
+
+    // Input While 
     while (game_is_running()) {
         int key = getch();     // revine dupa 100 ms si fara tasta (timeout din ui_init)
         if (key == ERR)
@@ -122,26 +128,29 @@ int main(int argc, char *argv[])
                 tank_push_key(&game.tanks[i], key);
     }
 
-    // Oprire: tancurile pot dormi in sem_wait, le trezim ca sa vada ca jocul s-a terminat.
+    // Cleanup la tankuri
+
+    // inchdem thread urile la tankuri
     for (int i = 0; i < started; i++) {
-        tank_wake(&game.tanks[i]);
+        tank_wake(&game.tanks[i]); // threadurile pot fii blocate in sem wait
         pthread_join(game.tanks[i].thread, NULL);
     }
 
-    // Proiectilele sunt detasate: asteptam sa observe isRunning == 0 si sa iasa.
     pthread_mutex_lock(&game.board_lock);
     while (game.active_bullets > 0)
         pthread_cond_wait(&game.bullets_done, &game.board_lock);
     int winner = game.winner;
     pthread_mutex_unlock(&game.board_lock);
 
+    // winner = -1      cnv a aparasat q pentru exit
+    // winner >= 0      jocul s a terminat printr o lovitura finala
     if (winner >= 0) {
         char msg[64];
         snprintf(msg, sizeof(msg), "Tancul %c a castigat! Apasa orice tasta.",
                  game.tanks[winner].name);
         ui_show_message(msg);
-        flushinp();
-        timeout(-1);
+        flushinp(); // arunca toate tastele deja apasate si inca necittie din buffer
+        timeout(-1); // getch n o sa mai astepte 100ms
         getch();
     }
 
@@ -154,4 +163,5 @@ int main(int argc, char *argv[])
     tank_destroy(&game.tanks[1]);
     game_destroy();
     return 0;
+
 }
